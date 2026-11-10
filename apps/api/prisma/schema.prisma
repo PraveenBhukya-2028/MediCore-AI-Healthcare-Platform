@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "mysql"
+  url = env("DATABASE_URL")
+}
+enum Role {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+enum AppointmentStatus {
+  BOOKED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+enum DoctorStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+enum WaitlistStatus {
+  WAITING
+  NOTIFIED
+  BOOKED
+  EXPIRED
+}
+model User {
+  id String @id @default(cuid())
+  name String
+  email String @unique
+  passwordHash String
+  role Role @default(PATIENT)
+  phone String?
+  createdAt DateTime @default(now())
+  doctor Doctor?
+  patientAppointments Appointment[] @relation("PatientAppointments")
+  records MedicalRecord[] @relation("PatientRecords")
+  authoredRecords MedicalRecord[] @relation("RecordAuthor")
+  prescriptions Prescription[] @relation("PatientPrescriptions")
+  authoredPrescriptions Prescription[] @relation("PrescriptionAuthor")
+  notifications Notification[]
+  waitlist WaitlistEntry[]
+  auditEvents AuditLog[]
+}
+model Clinic {
+  id String @id @default(cuid())
+  name String
+  address String
+  city String
+  phone String?
+  doctors Doctor[]
+}
+model Doctor {
+  id String @id @default(cuid())
+  userId String @unique
+  clinicId String
+  specialty String
+  bio String @db.Text
+  consultationFee Decimal @db.Decimal(8,2)
+  experienceYears Int @default(1)
+  status DoctorStatus @default(ACTIVE)
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  clinic Clinic @relation(fields:[clinicId], references:[id])
+  appointments Appointment[]
+  slots AvailabilitySlot[]
+  waitlist WaitlistEntry[]
+  records MedicalRecord[]
+  prescriptions Prescription[]
+}
+model Appointment {
+  id String @id @default(cuid())
+  patientId String
+  doctorId String
+  startsAt DateTime
+  endsAt DateTime
+  status AppointmentStatus @default(BOOKED)
+  reason String? @db.VarChar(500)
+  createdAt DateTime @default(now())
+  patient User @relation("PatientAppointments", fields:[patientId], references:[id])
+  doctor Doctor @relation(fields:[doctorId], references:[id])
+  @@index([doctorId, startsAt])
+  @@index([patientId, startsAt])
+}
+model AvailabilitySlot {
+  id String @id @default(cuid())
+  doctorId String
+  startsAt DateTime
+  endsAt DateTime
+  isOpen Boolean @default(true)
+  doctor Doctor @relation(fields:[doctorId], references:[id], onDelete:Cascade)
+  @@unique([doctorId, startsAt])
+  @@index([startsAt, isOpen])
+}
+model WaitlistEntry {
+  id String @id @default(cuid())
+  patientId String
+  doctorId String
+  desiredAt DateTime
+  status WaitlistStatus @default(WAITING)
+  createdAt DateTime @default(now())
+  patient User @relation(fields:[patientId], references:[id], onDelete:Cascade)
+  doctor Doctor @relation(fields:[doctorId], references:[id], onDelete:Cascade)
+  @@index([doctorId, desiredAt, status])
+}
+model MedicalRecord {
+  id String @id @default(cuid())
+  patientId String
+  doctorId String
+  authorId String
+  title String
+  category String
+  summary String @db.Text
+  fileUrl String? @db.VarChar(1000)
+  createdAt DateTime @default(now())
+  patient User @relation("PatientRecords", fields:[patientId], references:[id])
+  doctor Doctor @relation(fields:[doctorId], references:[id])
+  author User @relation("RecordAuthor", fields:[authorId], references:[id])
+  @@index([patientId, createdAt])
+}
+model Prescription {
+  id String @id @default(cuid())
+  patientId String
+  doctorId String
+  authorId String
+  medication String
+  dosage String
+  instructions String @db.Text
+  issuedAt DateTime @default(now())
+  patient User @relation("PatientPrescriptions", fields:[patientId], references:[id])
+  doctor Doctor @relation(fields:[doctorId], references:[id])
+  author User @relation("PrescriptionAuthor", fields:[authorId], references:[id])
+  @@index([patientId, issuedAt])
+}
+model Notification {
+  id String @id @default(cuid())
+  userId String
+  title String
+  message String @db.Text
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@index([userId, createdAt])
+}
+model AuditLog {
+  id String @id @default(cuid())
+  userId String?
+  action String
+  entity String
+  entityId String?
+  details String? @db.Text
+  createdAt DateTime @default(now())
+  user User? @relation(fields:[userId], references:[id], onDelete:SetNull)
+  @@index([createdAt])
+}
